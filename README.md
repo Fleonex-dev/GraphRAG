@@ -1,89 +1,150 @@
-# ContextGraph RAG
+# ContextGraph
 
-A bleeding-edge Graph-based Retrieval-Augmented Generation (GraphRAG) system that builds and queries a **Temporal Context Graph** for intelligent document understanding and question answering.
+A **True Context Graph** implementation for intelligent document understanding — capturing not just *what* entities exist, but *how* decisions were made and *why*.
 
-> **🎯 Learning Project** - Built to explore modern AI engineering patterns: knowledge graphs, temporal reasoning, multi-hop retrieval, and LLM orchestration.
-
----
-
-## 🧠 Core Concept: Temporal Context Graph
-
-Unlike traditional RAG (which uses flat vector similarity), this project builds a **living knowledge graph** that captures:
-
-| Dimension | Description |
-|-----------|-------------|
-| **Entities** | People, organizations, concepts, events extracted from documents |
-| **Relationships** | Typed edges with rich descriptions (e.g., `WORKS_AT`, `CAUSED_BY`, `PART_OF`) |
-| **Temporal Context** | When facts were true, validity windows, event sequences |
-| **Provenance** | Source document, extraction confidence, last updated timestamp |
-| **Community Hierarchy** | Auto-detected topic clusters at multiple granularity levels |
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        TEMPORAL CONTEXT GRAPH                       │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌─────────┐    ACQUIRED (2023)   ┌─────────┐                       │
-│  │ Company │──────────────────────▶│ Startup │                       │
-│  │    A    │                       │    B    │                       │
-│  └────┬────┘                       └────┬────┘                       │
-│       │ EMPLOYS (2020-present)          │ FOUNDED_BY (2019)         │
-│       ▼                                 ▼                           │
-│  ┌─────────┐    CO_AUTHORED (2022)  ┌─────────┐                     │
-│  │  Alice  │◀──────────────────────▶│   Bob   │                     │
-│  └─────────┘                        └─────────┘                     │
-│       │                                                             │
-│       │ temporal_context: {valid_from: "2022-01", valid_to: null}   │
-└─────────────────────────────────────────────────────────────────────┘
-```
+> **🎯 Learning Project** - Exploring modern AI engineering: context graphs, decision tracing, causal reasoning, and LLM orchestration.
+> 
+> **💰 100% Free** - Runs entirely on local models (Ollama) with no API costs.
 
 ---
 
-## 🏗️ Architecture
+## 🧠 What is a Context Graph?
+
+### Context Graph vs Knowledge Graph
+
+| Aspect | Knowledge Graph | **Context Graph** |
+|--------|----------------|-------------------|
+| **Focus** | "What is" — static entities & relationships | **"How & Why"** — decision traces, reasoning paths |
+| **Structure** | Entities → Relationships | Entities + **Decisions** + **States** + **Evidence** |
+| **Time** | Optional timestamps | **Core feature** — captures world state at each decision |
+| **Purpose** | Answer factual queries | **Trace reasoning**, replay decisions, learn from precedents |
+| **Graph Type** | General graph | **DAG** (Directed Acyclic Graph) — causal flow |
+
+### The Key Insight
+
+A **knowledge graph** answers: *"Who is the CEO of Company X?"*
+
+A **context graph** answers: *"Why did the board choose Alice as CEO, what evidence was considered, who else was evaluated, and what was the company's state at that time?"*
+
+---
+
+## 🏗️ Context Graph Architecture
+
+```
+                            CONTEXT GRAPH (DAG)
+    ┌─────────────────────────────────────────────────────────────────┐
+    │                                                                 │
+    │   ┌─────────────┐                                               │
+    │   │   SOURCE    │  ← Document/Evidence that triggered the graph │
+    │   │  DOCUMENT   │                                               │
+    │   └──────┬──────┘                                               │
+    │          │ extracted_from                                       │
+    │          ▼                                                      │
+    │   ┌─────────────┐    based_on     ┌─────────────┐               │
+    │   │   STATE     │◄────────────────│  EVIDENCE   │               │
+    │   │  (t=2023)   │                 │   (facts)   │               │
+    │   │             │                 └─────────────┘               │
+    │   │ • revenue   │                                               │
+    │   │ • headcount │                                               │
+    │   │ • market    │                                               │
+    │   └──────┬──────┘                                               │
+    │          │ led_to                                               │
+    │          ▼                                                      │
+    │   ┌─────────────┐    considered    ┌─────────────┐              │
+    │   │  DECISION   │◄─────────────────│ ALTERNATIVE │              │
+    │   │             │                  │  (rejected) │              │
+    │   │ "Acquire    │                  └─────────────┘              │
+    │   │  Startup B" │                                               │
+    │   │             │────────────────────────┐                      │
+    │   └──────┬──────┘                        │                      │
+    │          │ resulted_in                   │ rationale            │
+    │          ▼                               ▼                      │
+    │   ┌─────────────┐                 ┌─────────────┐               │
+    │   │   ACTION    │                 │  REASONING  │               │
+    │   │             │                 │             │               │
+    │   │ "Signed     │                 │ "Strategic  │               │
+    │   │  agreement" │                 │  fit for    │               │
+    │   └──────┬──────┘                 │  AI market" │               │
+    │          │ caused                 └─────────────┘               │
+    │          ▼                                                      │
+    │   ┌─────────────┐                                               │
+    │   │  OUTCOME    │                                               │
+    │   │  (t=2024)   │  ← New state after the decision               │
+    │   └─────────────┘                                               │
+    │                                                                 │
+    └─────────────────────────────────────────────────────────────────┘
+
+    Node Types:
+    ├── 📄 SOURCE      - Document/input that provides information
+    ├── 🌍 STATE       - Snapshot of world/context at a point in time
+    ├── 📊 EVIDENCE    - Facts, data, observations supporting decisions
+    ├── 🤔 DECISION    - A choice point with alternatives considered
+    ├── ❌ ALTERNATIVE - Options that were NOT chosen (important!)
+    ├── 💭 REASONING   - The "why" behind a decision
+    ├── ⚡ ACTION      - What was done as result of decision
+    └── 🎯 OUTCOME     - Resulting state after action
+```
+
+---
+
+## 🔄 System Pipeline
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                              ContextGraph RAG                                │
+│                              CONTEXTGRAPH PIPELINE                           │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ╔═══════════════════════════════════════════════════════════════════════╗   │
-│  ║                         INGESTION PIPELINE                            ║   │
+│  ║                         1. INGESTION                                  ║   │
 │  ╠═══════════════════════════════════════════════════════════════════════╣   │
-│  ║  ┌──────────┐   ┌──────────────┐   ┌─────────────┐   ┌─────────────┐  ║   │
-│  ║  │ Document │──▶│   Chunker    │──▶│   Entity    │──▶│   Graph     │  ║   │
-│  ║  │  Loader  │   │  (Semantic)  │   │  Extractor  │   │  Builder    │  ║   │
-│  ║  └──────────┘   └──────────────┘   └─────────────┘   └──────────────┘ ║   │
-│  ║       │                                                     │         ║   │
-│  ║       ▼                                                     ▼         ║   │
-│  ║  ┌──────────────────────┐                      ┌────────────────────┐ ║   │
-│  ║  │  Embedding Generator │                      │ Community Detector │ ║   │
-│  ║  │  (text-embedding-3)  │                      │    (Leiden Algo)   │ ║   │
-│  ║  └──────────────────────┘                      └────────────────────┘ ║   │
+│  ║  ┌──────────┐   ┌──────────────┐   ┌─────────────────────────────────┐║   │
+│  ║  │ Document │──▶│   Chunker    │──▶│  Decision/State Extractor       │║   │
+│  ║  │  Loader  │   │  (Semantic)  │   │  (LLM identifies decision pts)  │║   │
+│  ║  └──────────┘   └──────────────┘   └─────────────────────────────────┘║   │
 │  ╚═══════════════════════════════════════════════════════════════════════╝   │
 │                                      │                                       │
 │                                      ▼                                       │
 │  ╔═══════════════════════════════════════════════════════════════════════╗   │
-│  ║                         STORAGE LAYER                                 ║   │
+│  ║                       2. GRAPH CONSTRUCTION                           ║   │
 │  ╠═══════════════════════════════════════════════════════════════════════╣   │
-│  ║  ┌─────────────────────────┐      ┌─────────────────────────────────┐ ║   │
-│  ║  │      Neo4j / SQLite     │      │         ChromaDB / FAISS        │ ║   │
-│  ║  │   (Graph + Temporal)    │      │         (Vector Store)          │ ║   │
-│  ║  └─────────────────────────┘      └─────────────────────────────────┘ ║   │
+│  ║  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────────┐  ║   │
+│  ║  │  DAG Builder    │──▶│ Causal Linker   │──▶│ Temporal Annotator  │  ║   │
+│  ║  │ (nodes/edges)   │   │ (cause→effect)  │   │ (timestamps/order)  │  ║   │
+│  ║  └─────────────────┘   └─────────────────┘   └─────────────────────┘  ║   │
 │  ╚═══════════════════════════════════════════════════════════════════════╝   │
 │                                      │                                       │
 │                                      ▼                                       │
 │  ╔═══════════════════════════════════════════════════════════════════════╗   │
-│  ║                          QUERY ENGINE                                 ║   │
+│  ║                         3. STORAGE                                    ║   │
+│  ╠═══════════════════════════════════════════════════════════════════════╣   │
+│  ║     ┌─────────────────────┐         ┌─────────────────────────────┐   ║   │
+│  ║     │    NetworkX DAG     │         │      ChromaDB Vectors       │   ║   │
+│  ║     │  (graph structure)  │         │  (semantic search on nodes) │   ║   │
+│  ║     └─────────────────────┘         └─────────────────────────────┘   ║   │
+│  ╚═══════════════════════════════════════════════════════════════════════╝   │
+│                                      │                                       │
+│                                      ▼                                       │
+│  ╔═══════════════════════════════════════════════════════════════════════╗   │
+│  ║                        4. QUERY ENGINE                                ║   │
 │  ╠═══════════════════════════════════════════════════════════════════════╣   │
 │  ║  ┌────────────────┐   ┌────────────────┐   ┌────────────────────────┐ ║   │
-│  ║  │  Query Parser  │──▶│  DRIFT Search  │──▶│  Context Aggregator    │ ║   │
-│  ║  │(Intent + Time) │   │ (Graph+Vector) │   │  (Multi-hop Reasoning) │ ║   │
+│  ║  │ Query Analyzer │──▶│  Path Finder   │──▶│  Reasoning Assembler   │ ║   │
+│  ║  │(what/why/how?) │   │(trace through  │   │(build explanation from │ ║   │
+│  ║  │                │   │ DAG causally)  │   │ decision trace)        │ ║   │
 │  ║  └────────────────┘   └────────────────┘   └────────────────────────┘ ║   │
-│  ║                                                       │               ║   │
-│  ║                                                       ▼               ║   │
-│  ║                              ┌─────────────────────────────────────┐  ║   │
-│  ║                              │         LLM Response Generator      │  ║   │
-│  ║                              │  (GPT-4o / Claude / Local Ollama)   │  ║   │
-│  ║                              └─────────────────────────────────────┘  ║   │
+│  ╚═══════════════════════════════════════════════════════════════════════╝   │
+│                                      │                                       │
+│                                      ▼                                       │
+│  ╔═══════════════════════════════════════════════════════════════════════╗   │
+│  ║                      5. RESPONSE GENERATION                           ║   │
+│  ╠═══════════════════════════════════════════════════════════════════════╣   │
+│  ║           ┌─────────────────────────────────────────────────┐         ║   │
+│  ║           │              Ollama (Local LLM)                 │         ║   │
+│  ║           │  Llama 3.2 / Mistral / Gemma 2                  │         ║   │
+│  ║           │                                                 │         ║   │
+│  ║           │  Input: Query + Decision Trace from DAG         │         ║   │
+│  ║           │  Output: Answer with reasoning provenance       │         ║   │
+│  ║           └─────────────────────────────────────────────────┘         ║   │
 │  ╚═══════════════════════════════════════════════════════════════════════╝   │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -93,75 +154,81 @@ Unlike traditional RAG (which uses flat vector similarity), this project builds 
 
 ## ✨ Features
 
-### Core Features
-- **📄 Document Ingestion** - PDF, Markdown, TXT, web pages
-- **🔍 Entity & Relationship Extraction** - LLM-powered NER with typed relationships
-- **🕐 Temporal Reasoning** - Track when facts were valid, detect contradictions over time
-- **🌐 Multi-hop Graph Traversal** - Answer complex questions requiring connected facts
-- **📊 Community Detection** - Auto-cluster related entities using Leiden algorithm
+### Core Context Graph Features
+- **📄 Document Ingestion** - PDF, Markdown, TXT files
+- **🔍 Decision Point Extraction** - LLM identifies decisions, states, and reasoning
+- **🌳 DAG Construction** - Builds causal graph with proper temporal ordering
+- **⏪ Decision Replay** - Trace back through any decision to understand "why"
+- **� Causal Reasoning** - Follow cause→effect chains through the graph
 
 ### Bleeding-Edge Features
-- **🚀 DRIFT Search** - Hybrid retrieval combining graph traversal + vector similarity
-- **⚡ LazyGraphRAG Mode** - Defer summarization to query-time for faster indexing
-- **🔄 Incremental Updates** - Add new documents without full re-indexing
-- **📈 Confidence Scoring** - Track extraction confidence and source provenance
-- **🎯 Query Intent Detection** - Distinguish local vs global queries for optimal retrieval
+- **� Reasoning Provenance** - Every answer cites the decision trace that supports it
+- **🔄 Incremental Updates** - Add new documents, graph merges intelligently
+- **� State Diffing** - Compare world state before/after decisions
+- **🎯 Counterfactual Queries** - "What if alternative X was chosen instead?"
+- **📈 Decision Confidence** - Track extraction confidence and evidence strength
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Tech Stack (100% Free)
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Language** | Python 3.11+ | Core implementation |
-| **LLM** | OpenAI GPT-4o / Ollama (local) | Entity extraction, response generation |
-| **Embeddings** | text-embedding-3-small | Semantic similarity |
-| **Graph DB** | Neo4j (prod) / NetworkX (dev) | Knowledge graph storage |
-| **Vector Store** | ChromaDB | Embedding storage and retrieval |
-| **Framework** | LangChain / LangGraph | LLM orchestration and agents |
-| **API** | FastAPI | REST API endpoints |
-| **CLI** | Typer | Command-line interface |
-| **Visualization** | Pyvis / Streamlit | Interactive graph exploration |
+| Component | Technology | Cost |
+|-----------|------------|------|
+| **Language** | Python 3.11+ | Free |
+| **LLM** | Ollama (Llama 3.2 / Mistral / Gemma 2) | Free (local) |
+| **Embeddings** | Ollama embeddings or sentence-transformers | Free |
+| **Graph** | NetworkX (DAG) | Free |
+| **Persistence** | SQLite + JSON serialization | Free |
+| **Vector Store** | ChromaDB | Free |
+| **CLI** | Typer | Free |
+| **Visualization** | Pyvis / Graphviz | Free |
+| **Web UI** | Streamlit (optional) | Free |
+
+### Why Ollama?
+- Runs completely locally on your machine
+- Supports multiple models: Llama 3.2 (8B), Mistral (7B), Gemma 2 (9B)
+- No API keys, no usage limits, no costs
+- GPU acceleration if available, CPU fallback
 
 ---
 
 ## 📁 Project Structure
 
 ```
-GraphRAG/
+ContextGraph/
 ├── src/
-│   ├── ingestion/            # Document processing pipeline
-│   │   ├── loader.py         # Multi-format document loading
-│   │   ├── chunker.py        # Semantic chunking strategies
-│   │   └── extractor.py      # Entity & relationship extraction
+│   ├── ingestion/              # Document processing
+│   │   ├── loader.py           # Multi-format document loading
+│   │   ├── chunker.py          # Semantic chunking
+│   │   └── decision_extractor.py  # Extract decisions, states, reasoning
 │   │
-│   ├── graph/                # Graph operations
-│   │   ├── builder.py        # Graph construction & updates
-│   │   ├── community.py      # Leiden community detection
-│   │   └── temporal.py       # Temporal context handling
+│   ├── graph/                  # DAG operations
+│   │   ├── dag_builder.py      # Construct the context DAG
+│   │   ├── causal_linker.py    # Link cause → effect relationships
+│   │   ├── temporal.py         # Temporal ordering and state tracking
+│   │   └── node_types.py       # Decision, State, Evidence, Action, etc.
 │   │
-│   ├── retrieval/            # Query & retrieval
-│   │   ├── query_parser.py   # Intent detection & temporal parsing
-│   │   ├── drift_search.py   # Hybrid graph+vector retrieval
-│   │   └── aggregator.py     # Multi-hop context assembly
+│   ├── retrieval/              # Query processing
+│   │   ├── query_analyzer.py   # Classify: what/why/how queries
+│   │   ├── path_finder.py      # Trace causal paths through DAG
+│   │   └── reasoning_assembler.py  # Build explanation from trace
 │   │
-│   ├── storage/              # Persistence layer
-│   │   ├── graph_store.py    # Neo4j / NetworkX adapter
-│   │   └── vector_store.py   # ChromaDB adapter
+│   ├── storage/                # Persistence
+│   │   ├── graph_store.py      # NetworkX ↔ SQLite/JSON
+│   │   └── vector_store.py     # ChromaDB for semantic search
 │   │
-│   ├── generation/           # Response generation
-│   │   └── generator.py      # LLM response with citations
+│   ├── generation/             # Response generation
+│   │   └── generator.py        # Ollama-powered response with provenance
 │   │
-│   └── api/                  # Interfaces
-│       ├── rest.py           # FastAPI endpoints
-│       └── cli.py            # Typer CLI commands
+│   └── interfaces/             # User interfaces
+│       ├── cli.py              # Typer CLI
+│       └── web.py              # Streamlit dashboard (optional)
 │
 ├── config/
-│   └── settings.yaml         # Configuration
+│   └── settings.yaml           # Configuration (model selection, etc.)
 │
-├── tests/                    # Test suite
-├── docs/                     # Documentation
-├── examples/                 # Example documents & queries
+├── tests/                      # Test suite
+├── examples/                   # Example documents & queries
 └── README.md
 ```
 
@@ -171,65 +238,77 @@ GraphRAG/
 
 ### CLI
 ```bash
-# Initialize project
-contextgraph init
+# Initialize (downloads Ollama model if needed)
+contextgraph init --model llama3.2
 
-# Ingest documents
-contextgraph ingest ./documents/
+# Ingest a document (builds/updates context graph)
+contextgraph ingest ./documents/company_report.pdf
 
-# Query the graph
-contextgraph query "What acquisitions happened in 2023?"
+# Query with reasoning trace
+contextgraph query "Why did the company acquire Startup B?"
 
-# Visualize the graph
-contextgraph visualize --output graph.html
+# Visualize the decision graph
+contextgraph visualize --output decision_graph.html
+
+# Trace a specific decision
+contextgraph trace --decision "acquisition of Startup B"
 ```
 
 ### Python API
 ```python
 from contextgraph import ContextGraph
 
-# Initialize
-cg = ContextGraph(config="config/settings.yaml")
+# Initialize with local Ollama
+cg = ContextGraph(model="llama3.2")
 
 # Ingest documents
-cg.ingest("./documents/company_report.pdf")
+cg.ingest("./documents/board_meeting.pdf")
 
-# Query with temporal context
-response = cg.query(
-    "Who was the CEO when the acquisition happened?",
-    temporal_filter={"year": 2023}
-)
+# Query with decision trace
+response = cg.query("Why was Alice chosen as CEO?")
 
-print(response.answer)
-print(response.sources)       # Source documents
-print(response.graph_path)    # Reasoning path through graph
+print(response.answer)           # Natural language answer
+print(response.decision_trace)   # DAG path: Evidence → State → Decision → Reasoning
+print(response.confidence)       # How confident based on evidence
+print(response.alternatives)     # What other options were considered
 ```
 
-### REST API
-```bash
-# Ingest
-curl -X POST http://localhost:8000/ingest \
-  -F "file=@document.pdf"
+### Example Query Flow
+```
+User Query: "Why did the company decide to enter the AI market?"
 
-# Query
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What are the key relationships between entities?"}'
+1. Query Analyzer → Detected: "WHY" query about a DECISION
+2. Path Finder → Located decision node "Enter AI Market" 
+   → Traced backward through DAG
+3. Reasoning Assembler → Built trace:
+   
+   EVIDENCE: "Competitor X launched AI product (2023-Q2)"
+        ↓ observed
+   STATE: "Market share declining 5% YoY"
+        ↓ led_to
+   DECISION: "Enter AI market via acquisition"
+        ↓ rationale
+   REASONING: "Build vs Buy analysis favored acquisition 
+               due to time-to-market pressure"
+        ↓ considered
+   ALTERNATIVES: ["Build in-house team", "Partner with AI startup"]
+
+4. Generator → Produces answer with full provenance
 ```
 
 ---
 
 ## 🎯 Learning Objectives
 
-This project covers key AI engineering concepts:
+This project covers cutting-edge AI engineering concepts:
 
-1. **Knowledge Graphs** - Entity-relationship modeling, graph traversal
-2. **Temporal Reasoning** - Time-aware fact representation
-3. **Graph Algorithms** - Community detection (Leiden), path finding
-4. **RAG Architecture** - Retrieval-augmented generation patterns
-5. **Hybrid Search** - Combining symbolic (graph) and semantic (vector) retrieval
-6. **LLM Engineering** - Prompt design, structured extraction, chain-of-thought
-7. **API Design** - REST endpoints, CLI tools, configuration management
+1. **Context Graphs** - Beyond knowledge graphs: decision traces, state tracking
+2. **DAG Algorithms** - Topological sort, causal path finding, cycle detection
+3. **Temporal Reasoning** - State snapshots, event ordering, time-aware queries
+4. **Causal Inference** - Modeling cause→effect in structured graphs
+5. **Reasoning Provenance** - Explainable AI with traceable decision paths
+6. **Local LLM Engineering** - Ollama setup, prompt design, structured extraction
+7. **Hybrid Retrieval** - Combining graph traversal + vector similarity
 
 ---
 
@@ -237,49 +316,63 @@ This project covers key AI engineering concepts:
 
 ### Phase 1: Foundation 🏗️
 - [ ] Project setup with dependencies
+- [ ] Ollama integration and model management
 - [ ] Basic document loader (PDF, TXT, MD)
-- [ ] Simple entity extraction with LLM
-- [ ] NetworkX-based in-memory graph
-- [ ] Basic CLI with Typer
+- [ ] Node type definitions (Decision, State, Evidence, etc.)
+- [ ] Simple CLI with Typer
 
-### Phase 2: Core Graph Features 🔗
-- [ ] Relationship extraction with types
-- [ ] Temporal context annotation
-- [ ] ChromaDB vector store integration
-- [ ] Basic query engine (local search)
-- [ ] Graph visualization with Pyvis
+### Phase 2: Graph Construction 🔗
+- [ ] Decision/State extraction with LLM
+- [ ] NetworkX DAG builder
+- [ ] Causal relationship linking
+- [ ] Temporal ordering enforcement
+- [ ] Graph persistence (SQLite/JSON)
 
-### Phase 3: Advanced Retrieval 🚀
-- [ ] DRIFT search (graph + vector hybrid)
-- [ ] Community detection (Leiden algorithm)
-- [ ] Multi-hop reasoning
-- [ ] Query intent classification
-- [ ] Provenance tracking
+### Phase 3: Query Engine �
+- [ ] Query type classification (what/why/how)
+- [ ] Causal path finding algorithms
+- [ ] ChromaDB integration for semantic search
+- [ ] Reasoning assembler (build explanations from traces)
+- [ ] Response generation with Ollama
 
-### Phase 4: Production Features ⚡
-- [ ] Neo4j integration for persistence
-- [ ] FastAPI REST endpoints
+### Phase 4: Advanced Features 🚀
+- [ ] Graph visualization (Pyvis)
 - [ ] Incremental graph updates
-- [ ] LazyGraphRAG mode
-- [ ] Streamlit visualization dashboard
+- [ ] State diffing (before/after comparisons)
+- [ ] Counterfactual reasoning ("what if X instead?")
+- [ ] Streamlit web dashboard
 
-### Phase 5: Extensions 🔬
-- [ ] Contradiction detection
+### Phase 5: Polish ✨
 - [ ] Confidence scoring
 - [ ] Multi-document temporal alignment
-- [ ] Export to knowledge base formats
+- [ ] Graph export formats
+- [ ] Comprehensive test suite
+- [ ] Documentation
 
 ---
 
 ## 📚 Resources & References
 
-- [Microsoft GraphRAG Paper](https://arxiv.org/abs/2404.16130)
-- [Temporal GraphRAG (TG-RAG)](https://arxiv.org/abs/2410.XXXXX)
-- [Neo4j + LangChain GraphRAG](https://neo4j.com/developer-blog/graphrag-knowledge-graph/)
-- [Leiden Algorithm for Community Detection](https://arxiv.org/abs/1810.08473)
+- [Context Graphs: The Foundation of Enterprise AI](https://atlan.com/context-graph/)
+- [Decision Traces in AI Systems](https://medium.com/@foundationcapital)
+- [DAG-based Reasoning for LLMs](https://arxiv.org/abs/2410.xxxxx)
+- [LangGraph: State Management for Agents](https://langchain.com/langgraph)
+- [Ollama Documentation](https://ollama.ai/docs)
+
+---
+
+## 🔧 Prerequisites
+
+1. **Python 3.11+**
+2. **Ollama** - Install from [ollama.ai](https://ollama.ai)
+   ```bash
+   # After installing Ollama, pull a model
+   ollama pull llama3.2
+   ```
+3. **~8GB RAM** minimum for running local LLMs
 
 ---
 
 ## 📄 License
 
-MIT License - Feel free to learn, modify, and build upon this project!
+MIT License - Built for learning. Modify freely!
